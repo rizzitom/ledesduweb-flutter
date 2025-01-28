@@ -28,7 +28,10 @@ Cette application permet de gérer efficacement votre site e-commerce en central
 
 ## 🛠️ **Technologies utilisées :**
 
-- [Liste des technologies utilisées dans le projet]
+- Flutter
+- Javascript
+- NodeJS
+- MySQL
 
 ---
 
