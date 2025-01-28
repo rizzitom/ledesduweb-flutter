@@ -1,16 +1,8 @@
 # ledesignduweb
 
-A new Flutter project.
+Application de Gestion Administratif du sie E-commerce,
+Analyse avec statistiques, Gestion des commandes et des produits et + dans le futur !
 
-## Getting Started
+## Documentation de l'application
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+En Cours
