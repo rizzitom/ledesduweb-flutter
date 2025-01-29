@@ -33,6 +33,8 @@ dependencies:
   flutter_gradient_colors: ^2.1.1
   gestures: ^1.0.0
   http: ^1.2.2
+  fl_chart: ^0.70.2
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

@@ -3,7 +3,6 @@ import 'inscription.dart';
 import 'connexion.dart';
 import 'mdpforget.dart';
 import 'home_admin.dart';
-import 'parametres.dart';
 
 void main() {
   runApp(const MyApp());
@@ -26,7 +25,6 @@ class MyApp extends StatelessWidget {
         '/inscription': (context) => const InscriptionScreen(),
         '/mdpforget': (context) => const MdpForgetScreen(),
         '/home_admin': (context) => HomeadminScreen(),
-        '/parametres': (context) => ParametreScreen(),
       },
     );
   }

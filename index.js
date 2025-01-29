@@ -11,8 +11,13 @@ const helmet = require("helmet");
 const app = express();
 const port = process.env.PORT;
 
+const cors = require("cors");
+app.use(cors());
+
 app.use(bodyParser.json());
 app.use(helmet());
+
+// --------------------------------------------------------------------------------------------------------------------- //
 
 // Limitation des requêtes
 const limiter = rateLimit({
@@ -38,6 +43,8 @@ db.connect((err) => {
   }
   console.log("Connecté à la base de données MySQL");
 });
+
+// --------------------------------------------------------------------------------------------------------------------- //
 
 // Endpoint pour l'inscription
 app.post("/utilisateurs", async (req, res) => {
@@ -110,6 +117,220 @@ app.post("/login", async (req, res) => {
     });
   });
 });
+
+// --------------------------------------------------------------------------------------------------------------------- //
+
+// Gestion des statistiques :
+
+app.get("/statistiques", (req, res) => {
+  const stats = {};
+
+  // Utilisateurs actifs
+  const activeUsersQuery = "SELECT COUNT(*) AS users FROM utilisateurs";
+  db.query(activeUsersQuery, (err, results) => {
+    if (err) {
+      console.error(
+        "Erreur lors de la récupération des utilisateurs actifs :",
+        err
+      );
+      return res.status(500).json({ message: "Erreur interne du serveur." });
+    }
+    stats.activeUsers = results[0].users; // Changer de active_users à users
+
+    // Nouveaux inscrits (par exemple, dans le mois)
+    const newUsersQuery =
+      "SELECT COUNT(*) AS new_users FROM utilisateurs WHERE date_inscription > DATE_SUB(CURRENT_DATE, INTERVAL 1 MONTH)";
+    db.query(newUsersQuery, (err, results) => {
+      if (err) {
+        console.error(
+          "Erreur lors de la récupération des nouveaux inscrits :",
+          err
+        );
+        return res.status(500).json({ message: "Erreur interne du serveur." });
+      }
+      stats.newUsers = results[0].new_users;
+
+      // Produits en ligne
+      const onlineProductsQuery = "SELECT COUNT(*) AS products FROM produits";
+      db.query(onlineProductsQuery, (err, results) => {
+        if (err) {
+          console.error(
+            "Erreur lors de la récupération des produits en ligne :",
+            err
+          );
+          return res
+            .status(500)
+            .json({ message: "Erreur interne du serveur." });
+        }
+        stats.onlineProducts = results[0].products; // Changer de online_products à products
+
+        // Commandes totales
+        const totalOrdersQuery =
+          "SELECT COUNT(*) AS total_orders FROM commandes";
+        db.query(totalOrdersQuery, (err, results) => {
+          if (err) {
+            console.error(
+              "Erreur lors de la récupération des commandes :",
+              err
+            );
+            return res
+              .status(500)
+              .json({ message: "Erreur interne du serveur." });
+          }
+          stats.totalOrders = results[0].total_orders;
+
+          res.status(200).json(stats);
+        });
+      });
+    });
+  });
+});
+
+// --------------------------------------------------------------------------------------------------------------------- //
+
+// Gestion des produtis :
+
+// Endpoint pour ajouter un produit
+app.post("/produits", (req, res) => {
+  const {
+    nom,
+    description,
+    prix,
+    stock,
+    categorie,
+    marque,
+    modele,
+    image_url,
+  } = req.body;
+  if (!nom || !prix || stock === undefined) {
+    return res
+      .status(400)
+      .json({ message: "Les champs nom, prix et stock sont obligatoires." });
+  }
+  const sql = `INSERT INTO produits (nom, description, prix, stock, categorie, marque, modele, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+  db.query(
+    sql,
+    [nom, description, prix, stock, categorie, marque, modele, image_url],
+    (err, result) => {
+      if (err) {
+        console.error("Erreur lors de l'ajout du produit :", err);
+        return res.status(500).json({ message: "Erreur interne du serveur." });
+      }
+      res
+        .status(201)
+        .json({ message: "Produit ajouté avec succès.", id: result.insertId });
+    }
+  );
+});
+
+// Endpoint pour récupérer tous les produits
+app.get("/produits", (req, res) => {
+  const sql = "SELECT * FROM produits WHERE est_actif = TRUE";
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error("Erreur lors de la récupération des produits :", err);
+      return res.status(500).json({ message: "Erreur interne du serveur." });
+    }
+    res.status(200).json(results);
+  });
+});
+
+// Endpoint pour récupérer un produit par ID
+app.get("/produits/:id", (req, res) => {
+  const { id } = req.params;
+  const sql = "SELECT * FROM produits WHERE id = ?";
+  db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("Erreur lors de la récupération du produit :", err);
+      return res.status(500).json({ message: "Erreur interne du serveur." });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ message: "Produit non trouvé." });
+    }
+    res.status(200).json(results[0]);
+  });
+});
+
+// Endpoint pour mettre à jour un produit
+app.put("/produits/:id", (req, res) => {
+  const { id } = req.params;
+  const {
+    nom,
+    description,
+    prix,
+    stock,
+    categorie,
+    marque,
+    modele,
+    image_url,
+  } = req.body;
+  const sql = `UPDATE produits SET nom=?, description=?, prix=?, stock=?, categorie=?, marque=?, modele=?, image_url=? WHERE id=?`;
+  db.query(
+    sql,
+    [nom, description, prix, stock, categorie, marque, modele, image_url, id],
+    (err, result) => {
+      if (err) {
+        console.error("Erreur lors de la mise à jour du produit :", err);
+        return res.status(500).json({ message: "Erreur interne du serveur." });
+      }
+      res.status(200).json({ message: "Produit mis à jour avec succès." });
+    }
+  );
+});
+
+// Endpoint pour supprimer un produit
+app.delete("/produits/:id", (req, res) => {
+  const { id } = req.params;
+  const sql = "UPDATE produits SET est_actif = FALSE WHERE id = ?";
+  db.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error("Erreur lors de la suppression du produit :", err);
+      return res.status(500).json({ message: "Erreur interne du serveur." });
+    }
+    res.status(200).json({ message: "Produit supprimé avec succès." });
+  });
+});
+
+// --------------------------------------------------------------------------------------------------------------------- //
+
+// Commandes faites
+
+app.get("/commandes", (req, res) => {
+  const query = "SELECT * FROM commandes";
+
+  db.query(query, (err, results) => {
+    if (err) {
+      return res.status(500).json({
+        message: "Erreur lors de la récupération des commandes",
+        error: err,
+      });
+    }
+    res.status(200).json(results);
+  });
+});
+
+// Endpoint pour récupérer les détails d'une commande spécifique
+app.get("/commande/:id", (req, res) => {
+  const commandeId = req.params.id;
+  const query = "SELECT * FROM commandes WHERE id = ?";
+
+  db.query(query, [commandeId], (err, results) => {
+    if (err) {
+      return res.status(500).json({
+        message: "Erreur lors de la récupération de la commande",
+        error: err,
+      });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ message: "Commande non trouvée" });
+    }
+    res.status(200).json(results[0]);
+  });
+});
+
+// Endpoint pour ajouter une nouvelle commande
+
+// --------------------------------------------------------------------------------------------------------------------- //
 
 // Gestion des erreurs non gérées
 app.use((err, req, res, next) => {
