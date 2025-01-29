@@ -2,7 +2,7 @@
 
 # 📦 **Application de Gestion Administrative pour Sites E-commerce**
 
-Cette application permet de gérer efficacement votre site e-commerce en centralisant les commandes, produits et analyses statistiques. Elle est conçue pour optimiser l'expérience administrative et faciliter la gestion des tâches quotidiennes.
+Cette application permet de gérer efficacement un site e-commerce en centralisant les commandes, produits et analyses statistiques. Elle est conçue pour optimiser l'expérience administrative et faciliter la gestion des tâches quotidiennes.
 
 ---
 
