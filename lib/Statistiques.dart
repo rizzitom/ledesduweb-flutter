@@ -11,24 +11,56 @@ class Statistiques extends StatefulWidget {
 class _StatistiquesState extends State<Statistiques> {
   String users = '0';
   String newUsers = '0';
-  String Products = '0';
+  String products = '0';
   String totalOrders = '0';
-  List<dynamic> ongoingOrders = [];
+  List<FlSpot> evolutionUsersData = [];
+  List<FlSpot> evolutionOrdersData = [];
+  List ongoingOrders = [];
 
   Future<void> fetchStatistics() async {
-    final response =
-        await http.get(Uri.parse('http://10.0.2.2:3000/statistiques'));
+    try {
+      final response =
+          await http.get(Uri.parse('http://10.0.2.2:3000/statistiques'));
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          users = data['activeUsers'].toString();
+          newUsers = data['newUsers'].toString();
+          products = data['onlineProducts'].toString();
+          totalOrders = data['totalOrders'].toString();
+        });
+      } else {
+        throw Exception('Échec de la récupération des statistiques');
+      }
+    } catch (e) {
+      print('Erreur de connexion: $e');
+    }
+  }
+
+  Future<void> fetchEvolutionData() async {
+    final usersResponse = await http
+        .get(Uri.parse('http://10.0.2.2:3000/evolution-statistiques'));
+    final ordersResponse =
+        await http.get(Uri.parse('http://10.0.2.2:3000/evolution-commandes'));
+
+    if (usersResponse.statusCode == 200 && ordersResponse.statusCode == 200) {
+      final usersData = json.decode(usersResponse.body);
+      final ordersData = json.decode(ordersResponse.body);
+
       setState(() {
-        users = data['activeUsers'].toString();
-        newUsers = data['newUsers'].toString();
-        Products = data['onlineProducts'].toString();
-        totalOrders = data['totalOrders'].toString();
+        evolutionUsersData = (usersData as List).map<FlSpot>((item) {
+          return FlSpot((item['mois'] as num).toDouble(),
+              (item['nouveaux_utilisateurs'] as num).toDouble());
+        }).toList();
+
+        evolutionOrdersData = ordersData.map<FlSpot>((item) {
+          return FlSpot(
+              item['mois'].toDouble(), item['nombre_commandes'].toDouble());
+        }).toList();
       });
     } else {
-      throw Exception('Échec de la récupération des statistiques');
+      throw Exception('Échec de la récupération des statistiques d\'évolution');
     }
   }
 
@@ -51,6 +83,7 @@ class _StatistiquesState extends State<Statistiques> {
     super.initState();
     fetchStatistics();
     fetchOngoingOrders();
+    fetchEvolutionData();
   }
 
   @override
@@ -66,6 +99,7 @@ class _StatistiquesState extends State<Statistiques> {
               "Vue d'ensemble",
               style: TextStyle(
                   color: Colors.white,
+                  backgroundColor: Color(0xFF2d2c2e),
                   fontSize: 20,
                   fontWeight: FontWeight.bold),
             ),
@@ -73,15 +107,19 @@ class _StatistiquesState extends State<Statistiques> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildStatCard("Utilisateurs actifs", users, Colors.blue),
-                _buildStatCard("Nouveaux inscrits", newUsers, Colors.blue),
+                _buildStatCard(
+                  "Utilisateurs actifs",
+                  users,
+                  Colors.purple,
+                ),
+                _buildStatCard("Nouveaux inscrits", newUsers, Colors.purple),
               ],
             ),
             const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildStatCard("Produits en ligne", Products, Colors.purple),
+                _buildStatCard("Produits en ligne", products, Colors.purple),
                 _buildStatCard("Commandes Total", totalOrders, Colors.purple),
               ],
             ),
@@ -93,37 +131,51 @@ class _StatistiquesState extends State<Statistiques> {
                   fontSize: 18,
                   fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 15),
             ongoingOrders.isEmpty
-                ? const Center(
-                    child: CircularProgressIndicator(),
-                  )
-                : Expanded(
+                ? const Center(child: CircularProgressIndicator())
+                : SizedBox(
+                    height: 95,
                     child: ListView.builder(
-                      itemCount: ongoingOrders.length,
+                      scrollDirection: Axis.horizontal,
+                      itemCount:
+                          ongoingOrders.length > 4 ? 4 : ongoingOrders.length,
                       itemBuilder: (context, index) {
                         var order = ongoingOrders[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 8),
-                          color: Colors.white,
+                        return Container(
+                          width: 160,
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(31, 255, 255, 255),
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color.fromARGB(66, 5, 5, 5),
+                                blurRadius: 5,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
                           child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
-                                Text(
-                                  "Commande #${order['id']}",
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                Text(
-                                  "Total: ${order['total']}",
-                                  style: const TextStyle(color: Colors.purple),
-                                ),
-                                Text(
-                                  order['status'],
-                                  style: const TextStyle(color: Colors.green),
-                                ),
+                                Text("Commande #${order['id']}",
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold)),
+                                Text("Total: ${order['total']} €",
+                                    style: const TextStyle(
+                                        color:
+                                            Color.fromARGB(255, 59, 194, 82))),
+                                Text(order['statut'],
+                                    style: TextStyle(
+                                        color: order['statut'] == 'En cours'
+                                            ? Colors.orange
+                                            : const Color.fromARGB(
+                                                255, 211, 211, 208))),
                               ],
                             ),
                           ),
@@ -141,57 +193,33 @@ class _StatistiquesState extends State<Statistiques> {
             ),
             const SizedBox(height: 10),
             Expanded(
-              child: LineChart(
-                LineChartData(
+              child: BarChart(
+                BarChartData(
                   gridData: const FlGridData(show: false),
-                  titlesData: FlTitlesData(
-                    leftTitles: const AxisTitles(
-                      sideTitles:
-                          SideTitles(showTitles: false, reservedSize: 40),
-                    ),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (value, meta) {
-                          switch (value.toInt()) {
-                            case 1:
-                              return const Text("Jan");
-                            case 2:
-                              return const Text("Fév");
-                            case 3:
-                              return const Text("Mar");
-                            case 4:
-                              return const Text("Avr");
-                            case 5:
-                              return const Text("Mai");
-                            case 6:
-                              return const Text("Juin");
-                            default:
-                              return const Text("");
-                          }
-                        },
+                  borderData: FlBorderData(show: true, border: Border.all()),
+                  barGroups: [
+                    for (int i = 0; i < evolutionUsersData.length; i++)
+                      BarChartGroupData(
+                        x: i,
+                        barRods: [
+                          BarChartRodData(
+                            toY: evolutionUsersData[i].y,
+                            color: Colors.blue,
+                            width: 10,
+                          ),
+                        ],
                       ),
-                    ),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: const [
-                        FlSpot(1, 800),
-                        FlSpot(2, 1000),
-                        FlSpot(3, 750),
-                        FlSpot(4, 1250),
-                        FlSpot(5, 1500),
-                        FlSpot(6, 1700),
-                      ],
-                      isCurved: true,
-                      color: const Color(0xFF6200b3),
-                      dotData: const FlDotData(show: true),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: const Color.fromARGB(255, 78, 76, 76),
+                    for (int i = 0; i < evolutionOrdersData.length; i++)
+                      BarChartGroupData(
+                        x: i + evolutionUsersData.length,
+                        barRods: [
+                          BarChartRodData(
+                            toY: evolutionOrdersData[i].y,
+                            color: Colors.green,
+                            width: 10,
+                          ),
+                        ],
                       ),
-                    )
                   ],
                 ),
               ),
@@ -211,16 +239,13 @@ class _StatistiquesState extends State<Statistiques> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
+            Text(title,
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, color: color),
-            ),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold, color: color)),
           ],
         ),
       ),

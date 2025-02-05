@@ -135,7 +135,7 @@ app.get("/statistiques", (req, res) => {
       );
       return res.status(500).json({ message: "Erreur interne du serveur." });
     }
-    stats.activeUsers = results[0].users; // Changer de active_users à users
+    stats.activeUsers = results[0].users;
 
     // Nouveaux inscrits (par exemple, dans le mois)
     const newUsersQuery =
@@ -151,7 +151,8 @@ app.get("/statistiques", (req, res) => {
       stats.newUsers = results[0].new_users;
 
       // Produits en ligne
-      const onlineProductsQuery = "SELECT COUNT(*) AS products FROM produits";
+      const onlineProductsQuery =
+        "SELECT COUNT(*) AS products FROM produits Where est_actif = 1";
       db.query(onlineProductsQuery, (err, results) => {
         if (err) {
           console.error(
@@ -162,7 +163,7 @@ app.get("/statistiques", (req, res) => {
             .status(500)
             .json({ message: "Erreur interne du serveur." });
         }
-        stats.onlineProducts = results[0].products; // Changer de online_products à products
+        stats.onlineProducts = results[0].products;
 
         // Commandes totales
         const totalOrdersQuery =
@@ -294,41 +295,161 @@ app.delete("/produits/:id", (req, res) => {
 // --------------------------------------------------------------------------------------------------------------------- //
 
 // Commandes faites
+// Endpoint pour récupérer les commandes en cours
+app.get("/commandes/en-cours", async (req, res) => {
+  try {
+    const sql = `
+      SELECT c.id AS commande_id, c.utilisateur_id, c.total, c.adresse_livraison, c.statut, 
+             u.username AS utilisateur_username,  -- Récupère le nom d'utilisateur
+             p.id AS produit_id, p.nom AS produit_nom, p.prix, pc.quantite
+      FROM commandes c
+      JOIN produits_commandes pc ON c.id = pc.commande_id
+      JOIN produits p ON pc.produit_id = p.id
+      JOIN utilisateurs u ON c.utilisateur_id = u.id 
+      WHERE c.statut NOT IN ('Livrée', 'Annulée')
+      ORDER BY c.id DESC
+    `;
 
-app.get("/commandes", (req, res) => {
-  const query = "SELECT * FROM commandes";
+    db.query(sql, (err, results) => {
+      if (err) {
+        console.error(
+          "Erreur lors de la récupération des commandes en cours:",
+          err
+        );
+        return res.status(500).json({ message: "Erreur interne du serveur." });
+      }
 
+      const commandesMap = {};
+      results.forEach((row) => {
+        if (!commandesMap[row.commande_id]) {
+          commandesMap[row.commande_id] = {
+            id: row.commande_id,
+            utilisateur_id: row.utilisateur_id,
+            utilisateur_username: row.utilisateur_username,
+            total: row.total,
+            adresse_livraison: row.adresse_livraison,
+            statut: row.statut,
+            produits: [],
+          };
+        }
+        commandesMap[row.commande_id].produits.push({
+          id: row.produit_id,
+          nom: row.produit_nom,
+          prix: row.prix,
+          quantite: row.quantite,
+        });
+      });
+
+      res.status(200).json(Object.values(commandesMap));
+    });
+  } catch (error) {
+    console.error("Erreur serveur:", error);
+    res.status(500).json({ message: "Erreur interne du serveur." });
+  }
+});
+
+app.get("/commandes/:id", (req, res) => {
+  const { id } = req.params;
+  const sqlCommande = `
+    SELECT c.*, u.username AS utilisateur_username
+    FROM commandes c
+    LEFT JOIN utilisateurs u ON c.utilisateur_id = u.id
+    WHERE c.id = ?`;
+
+  db.query(sqlCommande, [id], (err, results) => {
+    if (err) {
+      console.error("Erreur lors de la récupération de la commande :", err);
+      return res.status(500).json({ message: "Erreur interne du serveur." });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ message: "Commande non trouvée." });
+    }
+    const commande = results[0];
+
+    const sqlArticles = `
+      SELECT c.mode_paiement, p.nom, pc.quantite, pc.prix_unitaire
+      FROM produits_commandes pc
+      JOIN produits p ON pc.produit_id = p.id
+      JOIN commandes c ON pc.commande_id = c.id      
+      WHERE c.id = ?`;
+
+    db.query(sqlArticles, [id], (err, articles) => {
+      if (err) {
+        console.error("Erreur lors de la récupération des articles :", err);
+        return res.status(500).json({ message: "Erreur interne du serveur." });
+      }
+
+      res.status(200).json({
+        commande,
+        articles,
+      });
+    });
+  });
+});
+
+// Endpoint pour récupérer les commandes en cours (dans statistiques)
+app.get("/commandes-en-cours", (req, res) => {
+  const query = "SELECT * FROM commandes WHERE statut = 'En cours'";
   db.query(query, (err, results) => {
     if (err) {
-      return res.status(500).json({
-        message: "Erreur lors de la récupération des commandes",
-        error: err,
-      });
+      console.error(
+        "Erreur lors de la récupération des commandes en cours :",
+        err
+      );
+      return res.status(500).json({ message: "Erreur interne du serveur." });
     }
     res.status(200).json(results);
   });
 });
 
-// Endpoint pour récupérer les détails d'une commande spécifique
-app.get("/commande/:id", (req, res) => {
-  const commandeId = req.params.id;
-  const query = "SELECT * FROM commandes WHERE id = ?";
+// Endpoint pour ajouter une nouvelle commande
 
-  db.query(query, [commandeId], (err, results) => {
+// --------------------------------------------------------------------------------------------------------------------- //
+
+app.get("/evolution-statistiques", (req, res) => {
+  const query = `
+      SELECT MONTH(date_inscription) AS mois, COUNT(*) AS nouveaux_utilisateurs
+      FROM utilisateurs
+      WHERE YEAR(date_inscription) = YEAR(CURDATE())
+      GROUP BY MONTH(date_inscription)
+      ORDER BY mois ASC
+  `;
+
+  db.query(query, (err, results) => {
     if (err) {
-      return res.status(500).json({
-        message: "Erreur lors de la récupération de la commande",
-        error: err,
-      });
+      console.error(
+        "Erreur lors de la récupération des données d'évolution:",
+        err
+      );
+      return res.status(500).json({ error: "Erreur serveur" });
     }
-    if (results.length === 0) {
-      return res.status(404).json({ message: "Commande non trouvée" });
-    }
-    res.status(200).json(results[0]);
+    res.json(results);
   });
 });
 
-// Endpoint pour ajouter une nouvelle commande
+// Endpoint pour l'évolution des commandes avec fl_chart
+
+app.get("/evolution-commandes", (req, res) => {
+  const sql = `
+    SELECT 
+      MONTH(date_commande) AS mois, 
+      COUNT(*) AS nombre_commandes 
+    FROM commandes 
+    WHERE date_commande >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) 
+    GROUP BY mois
+  `;
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error(
+        "Erreur lors de la récupération des statistiques de commandes:",
+        err
+      );
+      return res.status(500).send("Erreur interne du serveur.");
+    }
+    res.status(200).json(results);
+  });
+});
 
 // --------------------------------------------------------------------------------------------------------------------- //
 
