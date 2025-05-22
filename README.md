@@ -108,8 +108,7 @@ Avant de commencer, assurez-vous d'avoir installé les outils suivants sur votre
     Vous pouvez également lancer l'application directement depuis les options "Run" ou "Debug" de votre IDE.
 
 ### Résumé des Commandes Principales
-
-```bash
+`bash
 # Cloner le dépôt
 git clone [https://github.com/rizzitom/LDDW-Flutter.git](https://github.com/rizzitom/LDDW-Flutter.git)
 
@@ -124,3 +123,27 @@ flutter pub get
 
 # Lancer l'application
 flutter run
+
+
+mermaid
+graph TD
+    subgraph "Utilisateur"
+        A[<img src="[https://img.icons8.com/ios-glyphs/50/000000/user-male-circle.png](https://img.icons8.com/ios-glyphs/50/000000/user-male-circle.png)" width="40" /><br>Administrateur]
+    end
+    subgraph "Frontend"
+        B[<img src="[https://img.icons8.com/color/48/000000/flutter.png](https://img.icons8.com/color/48/000000/flutter.png)" width="40" /><br>Application Mobile<br>(Flutter / Dart)]
+    end
+    subgraph "Backend"
+        C{<img src="[https://img.icons8.com/fluency/48/000000/node-js.png](https://img.icons8.com/fluency/48/000000/node-js.png)" width="35" /><br>API REST<br>(NodeJS)}
+        D[<img src="[https://img.icons8.com/color/48/000000/mysql-logo.png](https://img.icons8.com/color/48/000000/mysql-logo.png)" width="40" /><br>Base de Données<br>(MySQL)]
+    end
+    A -- Interaction --> B
+    B -- Requêtes HTTP <br> (GET, POST, PUT, DELETE) --> C
+    C -- Réponses HTTP <br> (JSON) --> B
+    C -- Requêtes SQL <br> (SELECT, INSERT, UPDATE, DELETE) --> D
+    D -- Données Brutes --> C
+    %% Styles (optionnel, pour améliorer l'apparence si supporté)
+    style A fill:#f4f4f4,stroke:#333,stroke-width:2px,color:#333
+    style B fill:#D6EAF8,stroke:#2980B9,stroke-width:2px,color:#000
+    style C fill:#D5F5E3,stroke:#2ECC71,stroke-width:2px,color:#000
+    style D fill:#FCF3CF,stroke:#F1C40F,stroke-width:2px,color:#000
