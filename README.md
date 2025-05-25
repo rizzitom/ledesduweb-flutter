@@ -383,3 +383,29 @@ erDiagram
     conversations ||--o{ messages : "contient"
     conversations ||--o{ pieces_jointes : "contient"
     messages      ||--o{ pieces_jointes : "a des"
+
+
+
+
+
+graph TD
+    subgraph Tier_1 [Tier 1 : Client Mobile]
+        A[<img src="https://img.icons8.com/color/48/000000/flutter.png" width="40" /><br>Application LDW Admin<br>(Flutter/Dart)]
+    end
+
+    subgraph Tier_2_3 [Tier 2 & 3 : Backend]
+        B{<img src="https://img.icons8.com/fluency/48/000000/node-js.png" width="35" /><br>API REST & Serveur de Logique Métier<br>(NodeJS)}
+    end
+
+    subgraph Tier_4 [Tier 4 : Données]
+        C[<img src="https://img.icons8.com/color/48/000000/mysql-logo.png" width="40" /><br>Base de Données<br>(MySQL - DBTom)]
+    end
+
+    A -- Requêtes HTTPS (JSON) --> B;
+    B -- Réponses HTTPS (JSON) --> A;
+    B -- Requêtes SQL / ORM --> C;
+    C -- Données --> B;
+
+    style Tier_1 fill:#ECEFF1,stroke:#607D8B
+    style Tier_2_3 fill:#E3F2FD,stroke:#2196F3
+    style Tier_4 fill:#E8F5E9,stroke:#4CAF50
