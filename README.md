@@ -15,7 +15,6 @@ Une application mobile Flutter complète pour la gestion administrative d'un sit
 ### 🔧 Backend Node.js
 - **API RESTful** complète
 - **Upload d'images** avec Multer
-- **Sécurité** avec Helmet et Rate Limiting
 - **Base de données MySQL** optimisée
 
 ## 🛠️ Installation
