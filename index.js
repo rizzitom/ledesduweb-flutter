@@ -1,465 +1,850 @@
-require("dotenv").config();
-const express = require("express");
-const mysql = require("mysql2");
-const bodyParser = require("body-parser");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const rateLimit = require("express-rate-limit");
-const validator = require("validator");
-const helmet = require("helmet");
+const express = require('express');
+const mysql = require('mysql2/promise');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const path = require('path');
+const multer = require('multer');
+require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT;
+const PORT = process.env.PORT || 3000;
 
-const cors = require("cors");
-app.use(cors());
+// Middleware de sécurité
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
 
-app.use(bodyParser.json());
-app.use(helmet());
-
-// --------------------------------------------------------------------------------------------------------------------- //
-
-// Limitation des requêtes
+// Limitation du taux de requêtes
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: "Trop de requêtes, veuillez réessayer plus tard.",
+  max: 1000,
+  message: 'Trop de requêtes depuis cette IP'
 });
 app.use(limiter);
 
-// Configuration MySQL
-const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-});
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.static('public'));
 
-// Connexion à MySQL
-db.connect((err) => {
-  if (err) {
-    console.error("Erreur de connexion à MySQL:", err);
-    process.exit(1);
-  }
-  console.log("Connecté à la base de données MySQL");
-});
+// Configuration de la base de données
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'ldw',
+  charset: 'utf8mb4'
+};
 
-// --------------------------------------------------------------------------------------------------------------------- //
-
-// Endpoint pour l'inscription
-app.post("/utilisateurs", async (req, res) => {
-  const { email, username, password, nom, prenom } = req.body;
-
-  if (!email || !username || !password || !nom || !prenom) {
-    return res.status(400).send("Tous les champs sont requis.");
-  }
-
-  if (!validator.isEmail(email)) {
-    return res.status(400).send("Email invalide.");
-  }
-
+// Fonction pour créer une connexion à la base de données
+async function createConnection() {
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const sql = `INSERT INTO utilisateurs (email, username, password, nom, prenom) VALUES (?, ?, ?, ?, ?)`;
-    db.query(
-      sql,
-      [email, username, hashedPassword, nom, prenom],
-      (err, result) => {
-        if (err) {
-          console.error("Erreur lors de l'insertion:", err);
-          return res.status(500).send("Erreur interne du serveur.");
-        }
-        res.status(201).send("Utilisateur enregistré avec succès.");
-      }
-    );
-  } catch (err) {
-    console.error("Erreur lors du hachage du mot de passe:", err);
-    res.status(500).send("Erreur interne du serveur.");
+    const connection = await mysql.createConnection(dbConfig);
+    return connection;
+  } catch (error) {
+    console.error('Erreur de connexion à la base de données:', error);
+    throw error;
+  }
+}
+
+// Middleware d'authentification
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Token d\'accès requis' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'secret_key', (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Token invalide' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
+// Middleware pour vérifier les droits admin
+const requireAdmin = (req, res, next) => {
+  if (req.user.idRole !== 1) {
+    return res.status(403).json({ error: 'Accès administrateur requis' });
+  }
+  next();
+};
+
+// Configuration multer pour l'upload d'images
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'public/images/uploads/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
-// Endpoint pour la connexion
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).send("Identifiant et mot de passe sont requis.");
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Seules les images sont autorisées'));
+    }
   }
+});
 
-  const column = validator.isEmail(username) ? "email" : "username";
-  const sql = `SELECT * FROM utilisateurs WHERE ${column} = ?`;
+// ============ ROUTES D'AUTHENTIFICATION ============
 
-  db.query(sql, [username], async (err, results) => {
-    if (err) {
-      console.error("Erreur lors de la recherche:", err);
-      return res.status(500).send("Erreur interne du serveur.");
+/**
+ * Connexion admin : accepte email OU username
+ */
+app.post('/api/auth/login', async (req, res) => {
+  console.log('--- LOGIN ATTEMPT ---');
+  console.log('Request body:', req.body);
+  
+  try {
+    const { email, username, password } = req.body;
+    
+    // Vérifier que le mot de passe est fourni
+    if (!password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Mot de passe requis' 
+      });
     }
-
-    if (results.length === 0) {
-      return res.status(401).send("Identifiants incorrects.");
+    
+    // Vérifier qu'au moins un identifiant est fourni
+    if (!email && !username) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Email ou nom d\'utilisateur requis' 
+      });
     }
-
-    const user = results[0];
+    
+    const connection = await createConnection();
+    
+    // Construire la requête selon l'identifiant fourni
+    let query;
+    let params;
+    
+    if (email) {
+      query = 'SELECT * FROM utilisateurs WHERE email = ?';
+      params = [email];
+      console.log('Searching by email:', email);
+    } else {
+      query = 'SELECT * FROM utilisateurs WHERE username = ?';
+      params = [username];
+      console.log('Searching by username:', username);
+    }
+    
+    const [users] = await connection.execute(query, params);
+    
+    if (users.length === 0) {
+      await connection.end();
+      console.log('User not found');
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Identifiants invalides' 
+      });
+    }
+    
+    const user = users[0];
+    console.log('User found:', user.email, 'Role:', user.idRole);
+    
+    // Vérifier le mot de passe
     const validPassword = await bcrypt.compare(password, user.password);
-
+    
     if (!validPassword) {
-      return res.status(401).send("Mot de passe incorrect.");
+      await connection.end();
+      console.log('Invalid password');
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Identifiants invalides' 
+      });
     }
-
-    const token = jwt.sign({ id: user.id, email: user.email }, "passwordKey", {
-      expiresIn: "1h",
-    });
-    const { password: _, ...userWithoutPassword } = user;
-    res.status(200).json({
-      message: "Connexion réussie.",
+    
+    // Vérifier que l'utilisateur est admin (role 1)
+    if (user.idRole !== 1) {
+      await connection.end();
+      console.log('User is not admin, role:', user.idRole);
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Accès administrateur requis' 
+      });
+    }
+    
+    // Mettre à jour la dernière connexion
+    await connection.execute(
+      'UPDATE utilisateurs SET derniere_connexion = NOW() WHERE id = ?',
+      [user.id]
+    );
+    
+    // Enregistrer dans l'historique des connexions
+    await connection.execute(`
+      INSERT INTO historique_connexions (id_utilisateur, ip, user_agent, succes)
+      VALUES (?, ?, ?, ?)
+    `, [user.id, req.ip || 'unknown', req.get('User-Agent') || 'unknown', 1]);
+    
+    await connection.end();
+    
+    // Générer le token JWT
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        email: user.email, 
+        username: user.username,
+        idRole: user.idRole,
+        nom: user.nom,
+        prenom: user.prenom
+      },
+      process.env.JWT_SECRET || 'secret_key',
+      { expiresIn: '24h' }
+    );
+    
+    console.log('Login successful for user:', user.email);
+    
+    res.json({
+      success: true,
+      message: 'Connexion réussie',
       token,
-      user: userWithoutPassword,
-    });
-  });
-});
-
-// --------------------------------------------------------------------------------------------------------------------- //
-
-// Gestion des statistiques :
-
-app.get("/statistiques", (req, res) => {
-  const stats = {};
-
-  // Utilisateurs actifs
-  const activeUsersQuery = "SELECT COUNT(*) AS users FROM utilisateurs";
-  db.query(activeUsersQuery, (err, results) => {
-    if (err) {
-      console.error(
-        "Erreur lors de la récupération des utilisateurs actifs :",
-        err
-      );
-      return res.status(500).json({ message: "Erreur interne du serveur." });
-    }
-    stats.activeUsers = results[0].users;
-
-    // Nouveaux inscrits (par exemple, dans le mois)
-    const newUsersQuery =
-      "SELECT COUNT(*) AS new_users FROM utilisateurs WHERE date_inscription > DATE_SUB(CURRENT_DATE, INTERVAL 1 MONTH)";
-    db.query(newUsersQuery, (err, results) => {
-      if (err) {
-        console.error(
-          "Erreur lors de la récupération des nouveaux inscrits :",
-          err
-        );
-        return res.status(500).json({ message: "Erreur interne du serveur." });
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        nom: user.nom,
+        prenom: user.prenom,
+        idRole: user.idRole
       }
-      stats.newUsers = results[0].new_users;
-
-      // Produits en ligne
-      const onlineProductsQuery =
-        "SELECT COUNT(*) AS products FROM produits Where est_actif = 1";
-      db.query(onlineProductsQuery, (err, results) => {
-        if (err) {
-          console.error(
-            "Erreur lors de la récupération des produits en ligne :",
-            err
-          );
-          return res
-            .status(500)
-            .json({ message: "Erreur interne du serveur." });
-        }
-        stats.onlineProducts = results[0].products;
-
-        // Commandes totales
-        const totalOrdersQuery =
-          "SELECT COUNT(*) AS total_orders FROM commandes";
-        db.query(totalOrdersQuery, (err, results) => {
-          if (err) {
-            console.error(
-              "Erreur lors de la récupération des commandes :",
-              err
-            );
-            return res
-              .status(500)
-              .json({ message: "Erreur interne du serveur." });
-          }
-          stats.totalOrders = results[0].total_orders;
-
-          res.status(200).json(stats);
-        });
-      });
     });
-  });
-});
-
-// --------------------------------------------------------------------------------------------------------------------- //
-
-// Gestion des produtis :
-
-// Endpoint pour ajouter un produit
-app.post("/produits", (req, res) => {
-  const {
-    nom,
-    description,
-    prix,
-    stock,
-    categorie,
-    marque,
-    modele,
-    image_url,
-  } = req.body;
-  if (!nom || !prix || stock === undefined) {
-    return res
-      .status(400)
-      .json({ message: "Les champs nom, prix et stock sont obligatoires." });
+    
+  } catch (error) {
+    console.error('❌ Error in login:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Erreur serveur lors de la connexion' 
+    });
   }
-  const sql = `INSERT INTO produits (nom, description, prix, stock, categorie, marque, modele, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-  db.query(
-    sql,
-    [nom, description, prix, stock, categorie, marque, modele, image_url],
-    (err, result) => {
-      if (err) {
-        console.error("Erreur lors de l'ajout du produit :", err);
-        return res.status(500).json({ message: "Erreur interne du serveur." });
-      }
-      res
-        .status(201)
-        .json({ message: "Produit ajouté avec succès.", id: result.insertId });
-    }
-  );
 });
 
-// Endpoint pour récupérer tous les produits
-app.get("/produits", (req, res) => {
-  const sql = "SELECT * FROM produits WHERE est_actif = TRUE";
-  db.query(sql, (err, results) => {
-    if (err) {
-      console.error("Erreur lors de la récupération des produits :", err);
-      return res.status(500).json({ message: "Erreur interne du serveur." });
-    }
-    res.status(200).json(results);
-  });
-});
+// ============ ROUTES DASHBOARD ============
 
-// Endpoint pour récupérer un produit par ID
-app.get("/produits/:id", (req, res) => {
-  const { id } = req.params;
-  const sql = "SELECT * FROM produits WHERE id = ?";
-  db.query(sql, [id], (err, results) => {
-    if (err) {
-      console.error("Erreur lors de la récupération du produit :", err);
-      return res.status(500).json({ message: "Erreur interne du serveur." });
-    }
-    if (results.length === 0) {
-      return res.status(404).json({ message: "Produit non trouvé." });
-    }
-    res.status(200).json(results[0]);
-  });
-});
-
-// Endpoint pour mettre à jour un produit
-app.put("/produits/:id", (req, res) => {
-  const { id } = req.params;
-  const {
-    nom,
-    description,
-    prix,
-    stock,
-    categorie,
-    marque,
-    modele,
-    image_url,
-  } = req.body;
-  const sql = `UPDATE produits SET nom=?, description=?, prix=?, stock=?, categorie=?, marque=?, modele=?, image_url=? WHERE id=?`;
-  db.query(
-    sql,
-    [nom, description, prix, stock, categorie, marque, modele, image_url, id],
-    (err, result) => {
-      if (err) {
-        console.error("Erreur lors de la mise à jour du produit :", err);
-        return res.status(500).json({ message: "Erreur interne du serveur." });
-      }
-      res.status(200).json({ message: "Produit mis à jour avec succès." });
-    }
-  );
-});
-
-// Endpoint pour supprimer un produit
-app.delete("/produits/:id", (req, res) => {
-  const { id } = req.params;
-  const sql = "UPDATE produits SET est_actif = FALSE WHERE id = ?";
-  db.query(sql, [id], (err, result) => {
-    if (err) {
-      console.error("Erreur lors de la suppression du produit :", err);
-      return res.status(500).json({ message: "Erreur interne du serveur." });
-    }
-    res.status(200).json({ message: "Produit supprimé avec succès." });
-  });
-});
-
-// --------------------------------------------------------------------------------------------------------------------- //
-
-// Commandes faites
-// Endpoint pour récupérer les commandes en cours
-app.get("/commandes/en-cours", async (req, res) => {
+// Statistiques du tableau de bord
+app.get('/api/dashboard/stats', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const sql = `
-      SELECT c.id AS commande_id, c.utilisateur_id, c.total, c.adresse_livraison, c.statut, 
-             u.username AS utilisateur_username,  -- Récupère le nom d'utilisateur
-             p.id AS produit_id, p.nom AS produit_nom, p.prix, pc.quantite
+    const connection = await createConnection();
+    
+    // Statistiques générales
+    const [totalProduits] = await connection.execute('SELECT COUNT(*) as count FROM produits WHERE est_actif = 1');
+    const [totalCommandes] = await connection.execute('SELECT COUNT(*) as count FROM commandes');
+    const [totalClients] = await connection.execute('SELECT COUNT(*) as count FROM utilisateurs WHERE idRole = 2');
+    const [chiffreAffaires] = await connection.execute('SELECT SUM(montant_total) as total FROM commandes WHERE statut != "annulee"');
+    
+    // Commandes par statut
+    const [commandesParStatut] = await connection.execute(`
+      SELECT statut, COUNT(*) as count 
+      FROM commandes 
+      GROUP BY statut
+    `);
+    
+    // Ventes par mois (6 derniers mois)
+    const [ventesParMois] = await connection.execute(`
+      SELECT 
+        DATE_FORMAT(date_commande, '%Y-%m') as mois,
+        COUNT(*) as commandes,
+        SUM(montant_total) as chiffre_affaires
+      FROM commandes 
+      WHERE date_commande >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+        AND statut != 'annulee'
+      GROUP BY DATE_FORMAT(date_commande, '%Y-%m')
+      ORDER BY mois DESC
+    `);
+    
+    // Produits les plus vendus
+    const [topProduits] = await connection.execute(`
+      SELECT 
+        p.nom,
+        p.image_url,
+        SUM(cp.quantite) as total_vendu,
+        SUM(cp.quantite * cp.prix_unitaire) as chiffre_affaires
+      FROM commande_produit cp
+      JOIN produits p ON cp.id_produit = p.id
+      JOIN commandes c ON cp.id_commande = c.id
+      WHERE c.statut != 'annulee'
+      GROUP BY p.id, p.nom, p.image_url
+      ORDER BY total_vendu DESC
+      LIMIT 5
+    `);
+    
+    // Commandes récentes
+    const [commandesRecentes] = await connection.execute(`
+      SELECT 
+        c.id,
+        c.reference,
+        c.date_commande,
+        c.statut,
+        c.montant_total,
+        CONCAT(u.prenom, ' ', u.nom) as client
       FROM commandes c
-      JOIN produits_commandes pc ON c.id = pc.commande_id
-      JOIN produits p ON pc.produit_id = p.id
-      JOIN utilisateurs u ON c.utilisateur_id = u.id 
-      WHERE c.statut NOT IN ('Livrée', 'Annulée')
-      ORDER BY c.id DESC
-    `;
-
-    db.query(sql, (err, results) => {
-      if (err) {
-        console.error(
-          "Erreur lors de la récupération des commandes en cours:",
-          err
-        );
-        return res.status(500).json({ message: "Erreur interne du serveur." });
+      JOIN utilisateurs u ON c.id_utilisateur = u.id
+      ORDER BY c.date_commande DESC
+      LIMIT 10
+    `);
+    
+    await connection.end();
+    
+    res.json({
+      success: true,
+      data: {
+        stats: {
+          totalProduits: totalProduits[0].count,
+          totalCommandes: totalCommandes[0].count,
+          totalClients: totalClients[0].count,
+          chiffreAffaires: chiffreAffaires[0].total || 0
+        },
+        commandesParStatut,
+        ventesParMois,
+        topProduits,
+        commandesRecentes
       }
-
-      const commandesMap = {};
-      results.forEach((row) => {
-        if (!commandesMap[row.commande_id]) {
-          commandesMap[row.commande_id] = {
-            id: row.commande_id,
-            utilisateur_id: row.utilisateur_id,
-            utilisateur_username: row.utilisateur_username,
-            total: row.total,
-            adresse_livraison: row.adresse_livraison,
-            statut: row.statut,
-            produits: [],
-          };
-        }
-        commandesMap[row.commande_id].produits.push({
-          id: row.produit_id,
-          nom: row.produit_nom,
-          prix: row.prix,
-          quantite: row.quantite,
-        });
-      });
-
-      res.status(200).json(Object.values(commandesMap));
     });
   } catch (error) {
-    console.error("Erreur serveur:", error);
-    res.status(500).json({ message: "Erreur interne du serveur." });
+    console.error('Erreur dashboard:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-app.get("/commandes/:id", (req, res) => {
-  const { id } = req.params;
-  const sqlCommande = `
-    SELECT c.*, u.username AS utilisateur_username
-    FROM commandes c
-    LEFT JOIN utilisateurs u ON c.utilisateur_id = u.id
-    WHERE c.id = ?`;
+// ============ ROUTES PRODUITS ============
 
-  db.query(sqlCommande, [id], (err, results) => {
-    if (err) {
-      console.error("Erreur lors de la récupération de la commande :", err);
-      return res.status(500).json({ message: "Erreur interne du serveur." });
+// Récupérer tous les produits avec pagination
+app.get('/api/produits', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    let page = parseInt(req.query.page, 10) || 1;
+    if (page < 1) page = 1;
+
+    let limit = parseInt(req.query.limit, 10) || 10;
+    if (limit < 1) limit = 10;
+    if (limit > 100) limit = 100;
+    
+    let offset = (page - 1) * limit;
+    if (offset < 0) offset = 0;
+    
+    const search = req.query.search || '';
+    const categorie = req.query.categorie || '';
+    
+    const connection = await createConnection();
+    
+    let whereClause = 'WHERE 1=1';
+    let queryParams = [];
+    
+    if (search) {
+      whereClause += ' AND (p.nom LIKE ? OR p.description LIKE ?)';
+      queryParams.push(`%${search}%`, `%${search}%`);
     }
-    if (results.length === 0) {
-      return res.status(404).json({ message: "Commande non trouvée." });
+    
+    if (categorie) {
+      whereClause += ' AND p.id_categorie = ?';
+      queryParams.push(parseInt(categorie, 10));
     }
-    const commande = results[0];
-
-    const sqlArticles = `
-      SELECT c.mode_paiement, p.nom, pc.quantite, pc.prix_unitaire
-      FROM produits_commandes pc
-      JOIN produits p ON pc.produit_id = p.id
-      JOIN commandes c ON pc.commande_id = c.id      
-      WHERE c.id = ?`;
-
-    db.query(sqlArticles, [id], (err, articles) => {
-      if (err) {
-        console.error("Erreur lors de la récupération des articles :", err);
-        return res.status(500).json({ message: "Erreur interne du serveur." });
+    
+    // Construire la requête avec LIMIT et OFFSET directement
+    const [produits] = await connection.execute(`
+      SELECT 
+        p.*,
+        c.nom as categorie_nom
+      FROM produits p
+      LEFT JOIN categories c ON p.id_categorie = c.id
+      ${whereClause}
+      ORDER BY p.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `, queryParams);
+    
+    const [total] = await connection.execute(`
+      SELECT COUNT(*) as count
+      FROM produits p
+      ${whereClause}
+    `, queryParams);
+    
+    await connection.end();
+    
+    res.json({
+      success: true,
+      data: {
+        produits,
+        pagination: {
+          page,
+          limit,
+          total: total[0].count,
+          pages: Math.ceil(total[0].count / limit)
+        }
       }
-
-      res.status(200).json({
-        commande,
-        articles,
-      });
     });
-  });
+  } catch (error) {
+    console.error('Erreur récupération produits:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
 });
 
-// Endpoint pour récupérer les commandes en cours (dans statistiques)
-app.get("/commandes-en-cours", (req, res) => {
-  const query = "SELECT * FROM commandes WHERE statut = 'En cours'";
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error(
-        "Erreur lors de la récupération des commandes en cours :",
-        err
-      );
-      return res.status(500).json({ message: "Erreur interne du serveur." });
+// Créer un nouveau produit
+app.post('/api/produits', authenticateToken, requireAdmin, upload.single('image'), async (req, res) => {
+  try {
+    const {
+      nom,
+      description,
+      description_courte,
+      prix,
+      prix_promo,
+      stock,
+      id_categorie,
+      caracteristiques,
+      est_actif,
+      est_featured
+    } = req.body;
+    
+    const connection = await createConnection();
+    
+    // Générer un slug
+    const slug = nom.toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-');
+    
+    const image_url = req.file ? `/images/uploads/${req.file.filename}` : null;
+    
+    const [result] = await connection.execute(`
+      INSERT INTO produits (
+        nom, description, description_courte, prix, prix_promo, stock,
+        id_categorie, image_url, caracteristiques, est_actif, est_featured, slug
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      nom, description, description_courte, prix, prix_promo || null, stock,
+      id_categorie, image_url, caracteristiques || null, 
+      est_actif ? 1 : 0, est_featured ? 1 : 0, slug
+    ]);
+    
+    await connection.end();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Produit créé avec succès',
+      data: { id: result.insertId }
+    });
+  } catch (error) {
+    console.error('Erreur création produit:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
+
+// Mettre à jour un produit
+app.put('/api/produits/:id', authenticateToken, requireAdmin, upload.single('image'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      nom,
+      description,
+      description_courte,
+      prix,
+      prix_promo,
+      stock,
+      id_categorie,
+      caracteristiques,
+      est_actif,
+      est_featured
+    } = req.body;
+    
+    const connection = await createConnection();
+    
+    const slug = nom.toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-');
+    
+    let updateQuery = `
+      UPDATE produits SET
+        nom = ?, description = ?, description_courte = ?, prix = ?, 
+        prix_promo = ?, stock = ?, id_categorie = ?, caracteristiques = ?,
+        est_actif = ?, est_featured = ?, slug = ?, updated_at = NOW()
+    `;
+    let params = [
+      nom, description, description_courte, prix, prix_promo || null, stock,
+      id_categorie, caracteristiques || null, est_actif ? 1 : 0, est_featured ? 1 : 0, slug
+    ];
+    
+    if (req.file) {
+      updateQuery += ', image_url = ?';
+      params.push(`/images/uploads/${req.file.filename}`);
     }
-    res.status(200).json(results);
-  });
+    
+    updateQuery += ' WHERE id = ?';
+    params.push(id);
+    
+    await connection.execute(updateQuery, params);
+    await connection.end();
+    
+    res.json({ 
+      success: true,
+      message: 'Produit mis à jour avec succès' 
+    });
+  } catch (error) {
+    console.error('Erreur mise à jour produit:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
 });
 
-// Endpoint pour ajouter une nouvelle commande
+// Supprimer un produit
+app.delete('/api/produits/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const connection = await createConnection();
+    
+    await connection.execute('DELETE FROM produits WHERE id = ?', [id]);
+    await connection.end();
+    
+    res.json({ 
+      success: true,
+      message: 'Produit supprimé avec succès' 
+    });
+  } catch (error) {
+    console.error('Erreur suppression produit:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
 
-// --------------------------------------------------------------------------------------------------------------------- //
+// ============ ROUTES COMMANDES ============
 
-app.get("/evolution-statistiques", (req, res) => {
-  const query = `
-      SELECT MONTH(date_inscription) AS mois, COUNT(*) AS nouveaux_utilisateurs
-      FROM utilisateurs
-      WHERE YEAR(date_inscription) = YEAR(CURDATE())
-      GROUP BY MONTH(date_inscription)
-      ORDER BY mois ASC
-  `;
+// Récupérer toutes les commandes
+app.get('/api/commandes', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    let page = parseInt(req.query.page, 10) || 1;
+    if (page < 1) page = 1;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error(
-        "Erreur lors de la récupération des données d'évolution:",
-        err
-      );
-      return res.status(500).json({ error: "Erreur serveur" });
+    let limit = parseInt(req.query.limit, 10) || 10;
+    if (limit < 1) limit = 10;
+    if (limit > 100) limit = 100;
+    
+    let offset = (page - 1) * limit;
+    if (offset < 0) offset = 0;
+    
+    const statut = req.query.statut || '';
+    
+    const connection = await createConnection();
+    
+    let whereClause = 'WHERE 1=1';
+    let queryParams = [];
+    
+    if (statut) {
+      whereClause += ' AND c.statut = ?';
+      queryParams.push(statut);
     }
-    res.json(results);
-  });
+    
+    const [commandes] = await connection.execute(`
+      SELECT 
+        c.*,
+        CONCAT(u.prenom, ' ', u.nom) as client_nom,
+        u.email as client_email
+      FROM commandes c
+      JOIN utilisateurs u ON c.id_utilisateur = u.id
+      ${whereClause}
+      ORDER BY c.date_commande DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `, queryParams);
+    
+    const [total] = await connection.execute(`
+      SELECT COUNT(*) as count
+      FROM commandes c
+      ${whereClause}
+    `, queryParams);
+    
+    await connection.end();
+    
+    res.json({
+      success: true,
+      data: {
+        commandes,
+        pagination: {
+          page,
+          limit,
+          total: total[0].count,
+          pages: Math.ceil(total[0].count / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Erreur récupération commandes:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
 });
 
-// Endpoint pour l'évolution des commandes avec fl_chart
-
-app.get("/evolution-commandes", (req, res) => {
-  const sql = `
-    SELECT 
-      MONTH(date_commande) AS mois, 
-      COUNT(*) AS nombre_commandes 
-    FROM commandes 
-    WHERE date_commande >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) 
-    GROUP BY mois
-  `;
-
-  db.query(sql, (err, results) => {
-    if (err) {
-      console.error(
-        "Erreur lors de la récupération des statistiques de commandes:",
-        err
-      );
-      return res.status(500).send("Erreur interne du serveur.");
+// Récupérer une commande avec ses produits
+app.get('/api/commandes/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const connection = await createConnection();
+    
+    const [commandes] = await connection.execute(`
+      SELECT 
+        c.*,
+        CONCAT(u.prenom, ' ', u.nom) as client_nom,
+        u.email as client_email,
+        u.telephone as client_telephone
+      FROM commandes c
+      JOIN utilisateurs u ON c.id_utilisateur = u.id
+      WHERE c.id = ?
+    `, [id]);
+    
+    if (commandes.length === 0) {
+      await connection.end();
+      return res.status(404).json({ success: false, error: 'Commande non trouvée' });
     }
-    res.status(200).json(results);
-  });
+    
+    const [produits] = await connection.execute(`
+      SELECT 
+        cp.*,
+        p.nom as produit_nom,
+        p.image_url
+      FROM commande_produit cp
+      JOIN produits p ON cp.id_produit = p.id
+      WHERE cp.id_commande = ?
+    `, [id]);
+    
+    const [historique] = await connection.execute(`
+      SELECT 
+        h.*,
+        CONCAT(u.prenom, ' ', u.nom) as utilisateur_nom
+      FROM historique_commande h
+      LEFT JOIN utilisateurs u ON h.id_utilisateur = u.id
+      WHERE h.id_commande = ?
+      ORDER BY h.date_action DESC
+    `, [id]);
+    
+    await connection.end();
+    
+    res.json({
+      success: true,
+      data: {
+        commande: commandes[0],
+        produits,
+        historique
+      }
+    });
+  } catch (error) {
+    console.error('Erreur récupération commande:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
 });
 
-// --------------------------------------------------------------------------------------------------------------------- //
+// Mettre à jour le statut d'une commande
+app.put('/api/commandes/:id/statut', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { statut, notes } = req.body;
+    
+    const connection = await createConnection();
+    
+    await connection.execute(
+      'UPDATE commandes SET statut = ? WHERE id = ?',
+      [statut, id]
+    );
+    
+    // Ajouter à l'historique
+    await connection.execute(`
+      INSERT INTO historique_commande (id_commande, id_utilisateur, action, details)
+      VALUES (?, ?, ?, ?)
+    `, [id, req.user.id, 'changement_statut', `Statut changé vers: ${statut}${notes ? '. Notes: ' + notes : ''}`]);
+    
+    await connection.end();
+    
+    res.json({ 
+      success: true,
+      message: 'Statut de la commande mis à jour' 
+    });
+  } catch (error) {
+    console.error('Erreur mise à jour statut:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
 
-// Gestion des erreurs non gérées
-app.use((err, req, res, next) => {
-  console.error("Erreur non gérée :", err.stack);
-  res.status(500).json({ message: "Erreur interne du serveur." });
+// ============ ROUTES CATÉGORIES ============
+
+// Récupérer toutes les catégories
+app.get('/api/categories', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const connection = await createConnection();
+    
+    const [categories] = await connection.execute(`
+      SELECT 
+        c.*,
+        p.nom as parent_nom,
+        (SELECT COUNT(*) FROM produits WHERE id_categorie = c.id) as nombre_produits
+      FROM categories c
+      LEFT JOIN categories p ON c.parent_id = p.id
+      ORDER BY c.nom
+    `);
+    
+    await connection.end();
+    res.json({
+      success: true,
+      data: categories
+    });
+  } catch (error) {
+    console.error('Erreur récupération catégories:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
+
+// ============ ROUTES UTILISATEURS ============
+
+// Récupérer tous les utilisateurs
+app.get('/api/utilisateurs', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    let page = parseInt(req.query.page, 10) || 1;
+    if (page < 1) page = 1;
+
+    let limit = parseInt(req.query.limit, 10) || 10;
+    if (limit < 1) limit = 10;
+    if (limit > 100) limit = 100;
+    
+    let offset = (page - 1) * limit;
+    if (offset < 0) offset = 0;
+    
+    const role = req.query.role || '';
+    
+    const connection = await createConnection();
+    
+    let whereClause = 'WHERE 1=1';
+    let queryParams = [];
+    
+    if (role) {
+      whereClause += ' AND u.idRole = ?';
+      queryParams.push(parseInt(role, 10));
+    }
+    
+    const [utilisateurs] = await connection.execute(`
+      SELECT 
+        u.id,
+        u.email,
+        u.username,
+        u.nom,
+        u.prenom,
+        u.telephone,
+        u.date_inscription,
+        u.derniere_connexion,
+        u.points_fidelite,
+        r.libelle as role_nom,
+        (SELECT COUNT(*) FROM commandes WHERE id_utilisateur = u.id) as nombre_commandes
+      FROM utilisateurs u
+      JOIN roles r ON u.idRole = r.id
+      ${whereClause}
+      ORDER BY u.date_inscription DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `, queryParams);
+    
+    const [total] = await connection.execute(`
+      SELECT COUNT(*) as count
+      FROM utilisateurs u
+      ${whereClause}
+    `, queryParams);
+    
+    await connection.end();
+    
+    res.json({
+      success: true,
+      data: {
+        utilisateurs,
+        pagination: {
+          page,
+          limit,
+          total: total[0].count,
+          pages: Math.ceil(total[0].count / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Erreur récupération utilisateurs:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
+
+// ============ ROUTES SERVICES ET DEVIS ============
+
+// Récupérer tous les devis
+app.get('/api/devis', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const connection = await createConnection();
+    
+    const [devis] = await connection.execute(`
+      SELECT 
+        d.*,
+        s.nom as service_nom,
+        CONCAT(u.prenom, ' ', u.nom) as client_nom,
+        u.email as client_email
+      FROM devis d
+      JOIN services s ON d.id_service = s.id
+      JOIN utilisateurs u ON d.id_utilisateur = u.id
+      ORDER BY d.date_demande DESC
+    `);
+    
+    await connection.end();
+    res.json({
+      success: true,
+      data: devis
+    });
+  } catch (error) {
+    console.error('Erreur récupération devis:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
+
+// Mettre à jour un devis
+app.put('/api/devis/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { statut, montant_estime, notes_admin } = req.body;
+    
+    const connection = await createConnection();
+    
+    await connection.execute(`
+      UPDATE devis SET
+        statut = ?,
+        montant_estime = ?,
+        notes_admin = ?,
+        date_reponse = NOW()
+      WHERE id = ?
+    `, [statut, montant_estime, notes_admin, id]);
+    
+    await connection.end();
+    
+    res.json({ 
+      success: true,
+      message: 'Devis mis à jour avec succès' 
+    });
+  } catch (error) {
+    console.error('Erreur mise à jour devis:', error);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
+
+// Route simple pour tester l'API
+app.get('/', (req, res) => {
+  res.json({
+    message: 'API LeDesignDuWeb E-commerce Administration',
+    version: '1.0.0',
+    status: 'Running'
+  });
 });
 
 // Démarrage du serveur
-app.listen(port, () => {
-  console.log(`Serveur API en écoute sur http://localhost:${port}`);
+app.listen(PORT, () => {
+  console.log(`Serveur démarré sur le port ${PORT}`);
+  console.log(`API disponible sur: http://localhost:${PORT}`);
 });
+
+module.exports = app;

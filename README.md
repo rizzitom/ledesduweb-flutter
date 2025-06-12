@@ -1,411 +1,197 @@
-#ledesignduweb
+# Application Administration E-commerce LeDesignDuWeb
 
-# 📦 **Application de Gestion Administrative pour Sites E-commerce**
+Une application mobile Flutter complète pour la gestion administrative d'un site e-commerce, avec backend Node.js et base de données MySQL.
 
-Cette application permet de gérer efficacement un site e-commerce en centralisant les commandes, produits et analyses statistiques. Elle est conçue pour optimiser l'expérience administrative et faciliter la gestion des tâches quotidiennes.
+## 🚀 Fonctionnalités
 
----
-
-## 🚀 **Fonctionnalités Actuelles :**
-
-- **Gestion des commandes**  
-  Suivi en temps réel des commandes, gestion des statuts et des expéditions.
-
-- **Gestion des produits**  
-  Ajout, modification, suppression et organisation des produits.
-
-- **Analyse et statistiques**  
-  Visualisation des performances via des graphiques et tableaux pour un suivi optimal.
-
----
-
-## 🔮 **À venir :**
-
-- **Nouvelles fonctionnalités**  
-  Des options avancées de reporting, gestion des utilisateurs, et bien plus !
-
----
-
-## 🛠️ **Technologies utilisées :**
-
-- Flutter
-- Javascript
-- NodeJS
-- MySQL
-
----
-
-## 📜 **Installation :**
-
-## Instructions d'Installation et de Lancement
-
-Ces instructions vous guideront pour cloner le projet, installer les dépendances et lancer l'application sur votre environnement de développement.
-
-### 1. Prérequis
-
-Avant de commencer, assurez-vous d'avoir installé les outils suivants sur votre machine :
-
-* **Git :** Pour cloner le dépôt. ([Télécharger Git](https://git-scm.com/))
-* **Flutter SDK (dernière version stable recommandée) :** Le kit de développement Flutter. ([Instructions d'installation Flutter](https://flutter.dev/docs/get-started/install))
-    * Vérifiez que la commande `flutter` est accessible depuis votre terminal (exécutez `flutter doctor`).
-* **Un IDE configuré pour Flutter :**
-    * [Visual Studio Code](https://code.visualstudio.com/) avec l'extension [Flutter](https://marketplace.visualstudio.com/items?itemName=Dart-Code.flutter).
-    * Ou [Android Studio](https://developer.android.com/studio) avec le plugin Flutter.
-* **Un émulateur/simulateur ou un appareil physique :**
-    * Pour Android : Un AVD (Android Virtual Device) créé via Android Studio.
-    * Pour iOS : Xcode et un simulateur iOS, ou un appareil physique (nécessite un Mac).
-
-### 2. Étapes d'Installation et de Lancement
-
-1.  **Cloner le dépôt GitHub :**
-    Ouvrez un terminal et exécutez la commande suivante dans le répertoire de votre choix :
-    ```bash
-    git clone [https://github.com/rizzitom/LDDW-Flutter.git](https://github.com/rizzitom/LDDW-Flutter.git)
-    ```
-
-2.  **Accéder au répertoire du projet :**
-    Naviguez dans le dossier du projet nouvellement cloné :
-    ```bash
-    cd LDDW-Flutter
-    ```
-
-3.  **Installer les dépendances du projet :**
-    Cette commande télécharge tous les packages Dart et Flutter requis par le projet (définis dans `pubspec.yaml`) :
-    ```bash
-    flutter pub get
-    ```
-
-4.  **Configuration de l'environnement (si applicable) :**
-    * Certains projets peuvent nécessiter la configuration de variables d'environnement ou de fichiers de configuration spécifiques (par exemple, pour l'URL de l'API, des clés API, etc.).
-    * Vérifiez la présence de fichiers `.env.example` ou `config.dart.example` et suivez les instructions qu'ils pourraient contenir pour créer vos propres fichiers de configuration (`.env` ou `config.dart`).
-    * **Important :** L'URL de l'API REST doit être correctement configurée dans le code source de l'application pour qu'elle puisse communiquer avec le backend.
-
-5.  **Préparation du backend (API REST et MySQL) :**
-    Cette application mobile interagit avec une API REST (NodeJS) connectée à une base de données MySQL. **Le backend doit être opérationnel et accessible pour que l'application fonctionne pleinement.**
-    * Assurez-vous que votre serveur API REST est démarré.
-    * Vérifiez que votre instance MySQL est en cours d'exécution et accessible par l'API.
-    * Si vous testez avec un émulateur Android, l'adresse `localhost` de votre machine de développement est généralement accessible via `10.0.2.2` depuis l'émulateur. Pour un simulateur iOS, `localhost` ou `127.0.0.1` devrait fonctionner directement.
-
-6.  **Vérifier la configuration de l'environnement Flutter :**
-    Exécutez cette commande pour diagnostiquer et résoudre les problèmes de configuration de votre environnement Flutter :
-    ```bash
-    flutter doctor
-    ```
-    Suivez les recommandations fournies par `flutter doctor` pour corriger d'éventuels soucis.
-
-7.  **Sélectionner un appareil cible :**
-    * Lancez un émulateur Android, un simulateur iOS, ou connectez un appareil physique (avec le mode développeur et le débogage USB activés).
-    * Dans votre IDE (VS Code ou Android Studio), sélectionnez l'appareil cible sur lequel vous souhaitez exécuter l'application. Vous pouvez aussi lister les appareils connectés avec :
-        ```bash
-        flutter devices
-        ```
-
-8.  **Lancer l'application :**
-    Une fois l'appareil cible prêt et sélectionné, lancez l'application en utilisant :
-    ```bash
-    flutter run
-    ```
-    Vous pouvez également lancer l'application directement depuis les options "Run" ou "Debug" de votre IDE.
-
-
-
-```mermaid
-erDiagram
-    utilisateurs {
-        INT id PK
-        VARCHAR email "UNIQUE"
-        VARCHAR username
-        VARCHAR password
-        VARCHAR nom
-        VARCHAR prenom
-        TEXT adresse
-        VARCHAR code_postal
-        VARCHAR ville
-        VARCHAR telephone
-        INT idRole FK
-        TIMESTAMP date_inscription
-        TIMESTAMP derniere_connexion
-        VARCHAR two_factor_secret
-        BOOLEAN two_factor_enabled
-        VARCHAR backup_code
-        BOOLEAN notif_new_connexion
-        BOOLEAN notif_password_change
-        BOOLEAN notif_failed_attempts
-        BOOLEAN remember_devices
-        BOOLEAN extended_session
-        BOOLEAN confirm_order_by_email
-        INT points_fidelite
-        VARCHAR profile_picture
-    }
-
-    roles {
-        INT id PK
-        VARCHAR libelle
-        TIMESTAMP created_at
-    }
-
-    adresses {
-        INT id PK
-        INT id_utilisateur FK
-        VARCHAR nom_adresse
-        VARCHAR type_adresse
-        VARCHAR nom_complet
-        VARCHAR rue
-        VARCHAR complement
-        VARCHAR code_postal
-        VARCHAR ville
-        VARCHAR pays
-        VARCHAR telephone
-        BOOLEAN is_default
-        TIMESTAMP date_creation
-        TIMESTAMP date_modification
-    }
-
-    categories {
-        INT id PK
-        VARCHAR nom
-        TEXT description
-        INT parent_id FK "Référence à categories.id (auto-référence)"
-        VARCHAR image_url
-        BOOLEAN est_actif
-        VARCHAR slug "UNIQUE"
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
-    }
-
-    produits {
-        INT id PK
-        VARCHAR nom
-        TEXT description
-        VARCHAR description_courte
-        DECIMAL prix
-        DECIMAL prix_promo
-        INT stock
-        INT id_categorie FK
-        VARCHAR image_url
-        TEXT images_supplementaires
-        TEXT caracteristiques
-        BOOLEAN est_actif
-        BOOLEAN est_featured
-        VARCHAR slug "UNIQUE"
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
-    }
-
-    commandes {
-        INT id PK
-        INT id_utilisateur FK
-        TIMESTAMP date_commande
-        ENUM_statut statut "('en_attente','validee','en_preparation','expediee','livree','annulee')"
-        DECIMAL montant_total
-        DECIMAL frais_livraison
-        DECIMAL tva
-        VARCHAR pays_livraison
-        VARCHAR mode_livraison
-        VARCHAR point_relais_id
-        VARCHAR point_relais_nom
-        TEXT instructions_livraison
-        TEXT adresse_livraison
-        TEXT adresse_facturation
-        VARCHAR methode_paiement
-        VARCHAR reference "UNIQUE"
-        TEXT notes
-        VARCHAR motif_annulation
-        TEXT commentaire_annulation
-        INT note_client
-        TEXT commentaire_client
-    }
-
-    commande_produit {
-        INT id PK
-        INT id_commande FK
-        INT id_produit FK
-        INT quantite
-        DECIMAL prix_unitaire
-    }
-
-    factures {
-        INT id PK
-        INT id_commande FK
-        VARCHAR numero_facture
-        DATETIME date_emission
-        DECIMAL montant_ht
-        DECIMAL montant_tva
-        DECIMAL montant_ttc
-        TIMESTAMP date_creation
-    }
-
-    paiements {
-        INT id PK
-        INT id_commande FK
-        VARCHAR payment_intent_id
-        VARCHAR statut
-        DECIMAL montant
-        TEXT details
-        DATETIME date_paiement
-    }
-
-    historique_commande {
-        INT id PK
-        INT id_commande FK
-        INT id_utilisateur FK
-        VARCHAR action
-        TEXT details
-        TIMESTAMP date_action
-    }
-
-    services {
-        INT id PK
-        VARCHAR nom
-        TEXT description
-        DECIMAL prix_base
-        VARCHAR image_url
-        BOOLEAN est_actif
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
-    }
-
-    devis {
-        INT id PK
-        INT id_utilisateur FK
-        INT id_service FK
-        TEXT description_demande
-        ENUM_statut statut "('en_attente','en_cours','termine','rejete')"
-        TIMESTAMP date_demande
-        TIMESTAMP date_reponse
-        DECIMAL montant_estime
-        TEXT notes_admin
-    }
-
-    conversations {
-        INT id PK
-        INT id_utilisateur FK
-        VARCHAR sujet
-        ENUM_type type "('general','commande','devis','support')"
-        INT reference_commande FK "Nullable"
-        INT reference_devis FK "Nullable"
-        ENUM_statut statut "('ouvert','en_attente','resolu','ferme')"
-        TIMESTAMP date_creation
-        TIMESTAMP date_derniere_activite
-    }
-
-    messages {
-        INT id PK
-        INT id_conversation FK
-        INT id_utilisateur FK
-        TEXT contenu
-        BOOLEAN is_client
-        BOOLEAN lu
-        TIMESTAMP date_creation
-    }
-
-    pieces_jointes {
-        INT id PK
-        INT id_message FK
-        INT id_conversation FK
-        VARCHAR nom_fichier
-        VARCHAR chemin_fichier
-        TIMESTAMP date_creation
-    }
-
-    panier {
-        INT id PK
-        INT id_utilisateur FK
-        INT id_produit FK
-        INT quantite
-        DATETIME date_ajout
-        DATETIME date_modification
-    }
-
-    panier_temp {
-        INT id PK
-        VARCHAR session_id
-        INT id_produit FK
-        INT quantite
-        DATETIME date_ajout
-        DATETIME date_modification
-    }
-
-    historique_actions {
-        INT id PK
-        INT id_utilisateur FK
-        VARCHAR type_action
-        TEXT details
-        TIMESTAMP date_action
-    }
-
-    historique_connexions {
-        INT id PK
-        INT id_utilisateur FK
-        VARCHAR ip
-        TEXT user_agent
-        BOOLEAN succes
-        TIMESTAMP date_connexion
-    }
-
-    sessions {
-        INT id PK
-        INT id_utilisateur FK
-        VARCHAR session_token
-        TEXT user_agent
-        VARCHAR ip
-        TIMESTAMP last_activity
-    }
-
-    utilisateurs ||--o{ adresses : "possède"
-    utilisateurs ||--o{ commandes : "passe"
-    utilisateurs ||--o{ devis : "demande"
-    utilisateurs ||--o{ conversations : "participe à"
-    utilisateurs ||--o{ messages : "envoie/reçoit"
-    utilisateurs ||--o{ panier : "a un"
-    utilisateurs ||--o{ historique_actions : "effectue"
-    utilisateurs ||--o{ historique_connexions : "a des"
-    utilisateurs ||--o{ sessions : "a des"
-    utilisateurs ||--o{ historique_commande : "est concerné par"
-    roles ||--o{ utilisateurs : "est assigné à"
-
-    categories ||--o{ produits : "contient"
-    categories }o--|| categories : "est sous-catégorie de (parent_id)"
-
-    produits ||--o{ commande_produit : "est dans"
-    produits ||--o{ panier : "contient"
-    produits ||--o{ panier_temp : "contient"
-
-    commandes ||--o{ commande_produit : "liste"
-    commandes ||--o{ factures : "a pour"
-    commandes ||--o{ paiements : "est payée via"
-    commandes ||--o{ historique_commande : "a un"
-    commandes ||--o{ conversations : "peut être référencée dans"
-
-    services ||--o{ devis : "est pour"
-    devis    ||--o{ conversations : "peut être référencée dans"
-
-    conversations ||--o{ messages : "contient"
-    conversations ||--o{ pieces_jointes : "contient"
-    messages      ||--o{ pieces_jointes : "a des"
-
-
-
-
-
-graph TD
-    subgraph Tier_1 [Tier 1 : Client Mobile]
-        A[<img src="https://img.icons8.com/color/48/000000/flutter.png" width="40" /><br>Application LDW Admin<br>(Flutter/Dart)]
-    end
-
-    subgraph Tier_2_3 [Tier 2 & 3 : Backend]
-        B{<img src="https://img.icons8.com/fluency/48/000000/node-js.png" width="35" /><br>API REST & Serveur de Logique Métier<br>(NodeJS)}
-    end
-
-    subgraph Tier_4 [Tier 4 : Données]
-        C[<img src="https://img.icons8.com/color/48/000000/mysql-logo.png" width="40" /><br>Base de Données<br>(MySQL - DBTom)]
-    end
-
-    A -- Requêtes HTTPS (JSON) --> B;
-    B -- Réponses HTTPS (JSON) --> A;
-    B -- Requêtes SQL / ORM --> C;
-    C -- Données --> B;
-
-    style Tier_1 fill:#ECEFF1,stroke:#607D8B
-    style Tier_2_3 fill:#E3F2FD,stroke:#2196F3
-    style Tier_4 fill:#E8F5E9,stroke:#4CAF50
+### 📱 Application Mobile Flutter
+- **Authentification sécurisée** - Connexion administrateur avec JWT
+- **Tableau de bord** - Statistiques en temps réel et vue d'ensemble
+- **Gestion des produits** - CRUD complet avec recherche et filtres
+- **Gestion des commandes** - Suivi et modification des statuts
+- **Statistiques avancées** - Graphiques interactifs avec FL Chart
+- **Interface moderne** - Design inspiré de ledesignduweb.com
+
+### 🔧 Backend Node.js
+- **API RESTful** complète
+- **Upload d'images** avec Multer
+- **Sécurité** avec Helmet et Rate Limiting
+- **Base de données MySQL** optimisée
+
+## 🛠️ Installation
+
+### Prérequis
+- Node.js 16+
+- Flutter 3.5+
+- MySQL 5.7+
+- Base de données DBTom importée
+
+### 1. Installation du backend
+
+```bash
+# Installer les dépendances Node.js
+npm install
+
+# Configurer la base de données dans .env
+cp .env.example .env
+# Éditer .env avec vos paramètres MySQL
+```
+
+### 2. Installation de l'application Flutter
+
+```bash
+# Installer les dépendances Flutter
+flutter pub get
+
+# Générer les assets
+flutter pub run build_runner build
+```
+
+## 🚀 Lancement
+
+### 1. Démarrer le serveur backend
+
+```bash
+# Mode développement avec nodemon
+npm run dev
+
+# Ou mode production
+npm start
+```
+
+Le serveur sera disponible sur `http://localhost:3000`
+
+### 2. Lancer l'application Flutter
+
+```bash
+# Sur émulateur Android
+flutter run
+
+# Sur appareil physique
+flutter run --release
+```
+
+## 📊 Structure de l'application
+
+```
+lib/
+├── main.dart                 # Point d'entrée de l'application
+├── connexion.dart            # Écran de connexion
+├── home_admin.dart           # Tableau de bord principal
+├── gestions_produits.dart    # Gestion des produits
+├── gestions_commandes.dart   # Gestion des commandes
+├── Statistiques.dart         # Écran de statistiques
+├── DetailsCommande.dart      # Détails d'une commande
+└── services/
+    └── api_service.dart      # Service API pour communiquer avec le backend
+```
+
+## 🎨 Design & Interface
+
+L'application suit la charte graphique de LeDesignDuWeb avec :
+- **Couleurs principales** : Dégradé bleu-violet (#667eea → #764ba2)
+- **Composants** : Material Design 3 avec personnalisations
+- **Navigation** : Bottom Navigation Bar avec 4 sections
+
+## 📱 Écrans disponibles
+
+### 1. Connexion
+- Authentification sécurisée
+- Validation des champs
+- Gestion des erreurs
+- Design moderne avec animations
+
+### 2. Tableau de bord
+- Statistiques clés (produits, commandes, clients, CA)
+- Commandes récentes
+- Actions rapides
+- Graphiques de synthèse
+
+### 3. Gestion des produits
+- Liste paginée avec recherche
+- Filtrage par catégorie
+- Création/modification de produits
+- Upload d'images
+- Gestion du stock et des prix
+
+### 4. Gestion des commandes
+- Vue d'ensemble des commandes
+- Filtrage par statut
+- Modification des statuts
+- Détails complets des commandes
+- Historique des actions
+
+### 5. Statistiques
+- Graphiques interactifs (camembert, courbes, barres)
+- Répartition des commandes par statut
+- Évolution du chiffre d'affaires
+- Top des produits vendus
+
+## 🔐 Sécurité
+
+- **Authentification JWT** avec expiration
+- **Validation des entrées** côté client et serveur
+- **Rate limiting** pour prévenir les abus
+- **Helmet.js** pour sécuriser les headers HTTP
+- **CORS** configuré selon l'environnement
+
+## 🗄️ Base de données
+
+L'application utilise la base de données `DBTom` avec les tables :
+- `utilisateurs` - Gestion des comptes administrateurs
+- `produits` - Catalogue produits
+- `categories` - Organisation des produits
+- `commandes` - Commandes clients
+- `commande_produit` - Détails des commandes
+- `factures` - Facturation
+- `historique_*` - Traçabilité des actions
+
+## 📞 API Endpoints
+
+### Authentification
+- `POST /api/auth/login` - Connexion administrateur
+
+### Dashboard
+- `GET /api/dashboard/stats` - Statistiques générales
+
+### Produits
+- `GET /api/produits` - Liste des produits (avec pagination)
+- `POST /api/produits` - Créer un produit
+- `PUT /api/produits/:id` - Modifier un produit
+- `DELETE /api/produits/:id` - Supprimer un produit
+
+### Commandes
+- `GET /api/commandes` - Liste des commandes
+- `GET /api/commandes/:id` - Détails d'une commande
+- `PUT /api/commandes/:id/statut` - Modifier le statut
+
+### Autres
+- `GET /api/categories` - Liste des catégories
+- `GET /api/utilisateurs` - Gestion des utilisateurs
+- `GET /api/devis` - Gestion des devis
+
+## 🔧 Configuration
+
+### Variables d'environnement (.env)
+```env
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=DBTom
+JWT_SECRET=ledesignduweb_secret_key_2025
+PORT=3000
+```
+
+### Configuration Flutter
+Modifier `lib/services/api_service.dart` pour ajuster l'URL de l'API :
+```dart
+static const String baseUrl = 'http://localhost:3000/api';
+// ou pour un appareil physique :
+// static const String baseUrl = 'http://10.0.2.2:3000/api';
+```
+
+## 🎯 Comptes de test
+
+Utiliser un compte administrateur existant dans la base de données :
+- Email : admin@ledesignduweb.com
+- Mot de passe : admin123

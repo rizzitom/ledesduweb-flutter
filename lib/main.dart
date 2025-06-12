@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'inscription.dart';
+// import 'inscription.dart'; // Registration screen removed
 import 'connexion.dart';
 import 'mdpforget.dart';
 import 'home_admin.dart';
@@ -22,7 +22,6 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const ConnexionScreen(),
-        '/inscription': (context) => const InscriptionScreen(),
         '/mdpforget': (context) => const MdpForgetScreen(),
         '/home_admin': (context) => HomeadminScreen(),
       },
